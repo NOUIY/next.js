@@ -48,6 +48,58 @@ describe('Image Optimizer', () => {
       )
     })
 
+    it('should error when localPatterns length exceeds 25', async () => {
+      await nextConfig.replace(
+        '{ /* replaceme */ }',
+        JSON.stringify({
+          images: {
+            localPatterns: Array.from({ length: 26 }).map((_) => ({
+              pathname: '/foo/**',
+            })),
+          },
+        })
+      )
+      let stderr = ''
+
+      app = await launchApp(appDir, await findPort(), {
+        onStderr(msg) {
+          stderr += msg || ''
+        },
+      })
+      await waitFor(1000)
+      await killApp(app).catch(() => {})
+      await nextConfig.restore()
+
+      expect(stderr).toContain(
+        'Array must contain at most 25 element(s) at "images.localPatterns"'
+      )
+    })
+
+    it('should error when localPatterns has invalid prop', async () => {
+      await nextConfig.replace(
+        '{ /* replaceme */ }',
+        JSON.stringify({
+          images: {
+            localPatterns: [{ pathname: '/foo/**', foo: 'bar' }],
+          },
+        })
+      )
+      let stderr = ''
+
+      app = await launchApp(appDir, await findPort(), {
+        onStderr(msg) {
+          stderr += msg || ''
+        },
+      })
+      await waitFor(1000)
+      await killApp(app).catch(() => {})
+      await nextConfig.restore()
+
+      expect(stderr).toContain(
+        `Unrecognized key(s) in object: 'foo' at "images.localPatterns[0]"`
+      )
+    })
+
     it('should error when remotePatterns length exceeds 50', async () => {
       await nextConfig.replace(
         '{ /* replaceme */ }',
@@ -402,8 +454,9 @@ describe('Image Optimizer', () => {
 
         await retry(() => {
           expect(stderr).toContain(
-            `Invalid assetPrefix provided. Original error: TypeError [ERR_INVALID_URL]: Invalid URL`
+            `Invalid assetPrefix provided. Original error:`
           )
+          expect(stderr).toContain(`Invalid URL`)
         })
       } finally {
         await killApp(app).catch(() => {})
@@ -584,7 +637,7 @@ describe('Image Optimizer', () => {
             `public, max-age=86400, must-revalidate`
           )
           expect(res.headers.get('Content-Disposition')).toBe(
-            `inline; filename="test.webp"`
+            `attachment; filename="test.webp"`
           )
 
           await check(async () => {
@@ -615,7 +668,7 @@ describe('Image Optimizer', () => {
             `public, max-age=60, must-revalidate`
           )
           expect(res.headers.get('Content-Disposition')).toBe(
-            `inline; filename="test.webp"`
+            `attachment; filename="test.webp"`
           )
         })
       }
@@ -723,7 +776,7 @@ describe('Image Optimizer', () => {
           )
           expect(res.headers.get('Vary')).toBe('Accept')
           expect(res.headers.get('Content-Disposition')).toBe(
-            `inline; filename="next-js-bg.webp"`
+            `attachment; filename="next-js-bg.webp"`
           )
 
           await check(async () => {

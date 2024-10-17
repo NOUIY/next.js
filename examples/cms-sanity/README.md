@@ -9,6 +9,7 @@ The Studio connects to Sanity Content Lake, which gives you hosted content APIs 
 ## Features
 
 - A performant, static blog with editable posts, authors, and site settings
+- TypeScript setup with [Sanity TypeGen](https://www.sanity.io/docs/sanity-typegen)
 - A native and customizable authoring environment, accessible on `yourblog.com/studio`
 - Real-time and collaborative content editing with fine-grained revision history
 - Side-by-side instant content preview that works across your whole site
@@ -44,10 +45,16 @@ yarn create next-app --example cms-sanity next-sanity-blog
 pnpm create next-app --example cms-sanity next-sanity-blog
 ```
 
+Whenever you edit a GROQ query you update the TypeScript types by running:
+
+```bash
+npm run typegen
+```
+
 # Configuration
 
 - [Step 1. Set up the environment](#step-1-set-up-the-environment)
-  - [Reuse remote envionment variables](#reuse-remote-envionment-variables)
+  - [Reuse remote environment variables](#reuse-remote-environment-variables)
   - [Using the Sanity CLI](#using-the-sanity-cli)
     - [Creating a read token](#creating-a-read-token)
 - [Step 2. Run Next.js locally in development mode](#step-2-run-nextjs-locally-in-development-mode)
@@ -57,13 +64,13 @@ pnpm create next-app --example cms-sanity next-sanity-blog
 
 ## Step 1. Set up the environment
 
-### Reuse remote envionment variables
+### Reuse remote environment variables
 
 If you started with [deploying your own](#deploy-your-own) then you can run this to reuse the environment variables from the Vercel project and skip to the next step:
 
 ```bash
 npx vercel link
-npx vercel pull
+npx vercel env pull
 ```
 
 ### Using the Sanity CLI
@@ -114,7 +121,7 @@ Found existing NEXT_PUBLIC_SANITY_PROJECT_ID, replacing value.
 Found existing NEXT_PUBLIC_SANITY_DATASET, replacing value.
 ```
 
-It's important that when you're asked `Would you like to add configuration files for a Sanity project in this Next.js folder?` that you answer `No` as this example is alredy setup with the required configuration files.
+It's important that when you're asked `Would you like to add configuration files for a Sanity project in this Next.js folder?` that you answer `No` as this example is already setup with the required configuration files.
 
 #### Creating a read token
 

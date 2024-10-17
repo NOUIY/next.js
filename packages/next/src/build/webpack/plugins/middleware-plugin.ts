@@ -20,7 +20,6 @@ import {
   SUBRESOURCE_INTEGRITY_MANIFEST,
   NEXT_FONT_MANIFEST,
   SERVER_REFERENCE_MANIFEST,
-  PRERENDER_MANIFEST,
   INTERCEPTION_ROUTE_REWRITE_MANIFEST,
 } from '../../../shared/lib/constants'
 import type { MiddlewareConfig } from '../../analysis/get-page-static-info'
@@ -28,7 +27,10 @@ import type { Telemetry } from '../../../telemetry/storage'
 import { traceGlobals } from '../../../trace/shared'
 import { EVENT_BUILD_FEATURE_USAGE } from '../../../telemetry/events'
 import { normalizeAppPath } from '../../../shared/lib/router/utils/app-paths'
-import { INSTRUMENTATION_HOOK_FILENAME } from '../../../lib/constants'
+import {
+  INSTRUMENTATION_HOOK_FILENAME,
+  WEBPACK_LAYERS,
+} from '../../../lib/constants'
 import type { CustomRoutes } from '../../../lib/load-custom-routes'
 import { isInterceptionRouteRewrite } from '../../../lib/generate-interception-routes-rewrites'
 import { getDynamicCodeEvaluationError } from './wellknown-errors-plugin/parse-dynamic-code-evaluation-error'
@@ -42,13 +44,14 @@ export interface EdgeFunctionDefinition {
   name: string
   page: string
   matchers: MiddlewareMatcher[]
+  env: Record<string, string>
   wasm?: AssetBinding[]
   assets?: AssetBinding[]
   regions?: string[] | string
 }
 
 export interface MiddlewareManifest {
-  version: 2
+  version: 3
   sortedMiddleware: string[]
   middleware: { [page: string]: EdgeFunctionDefinition }
   functions: { [page: string]: EdgeFunctionDefinition }
@@ -64,6 +67,7 @@ interface EntryMetadata {
 }
 
 const NAME = 'MiddlewarePlugin'
+const MANIFEST_VERSION = 3
 
 /**
  * Checks the value of usingIndirectEval and when it is a set of modules it
@@ -116,7 +120,7 @@ function getEntryFiles(
           .map(
             (file) =>
               'server/' +
-              file.replace('.js', '_' + CLIENT_REFERENCE_MANIFEST + '.js')
+              file.replace(/\.js$/, '_' + CLIENT_REFERENCE_MANIFEST + '.js')
           )
       )
     }
@@ -131,10 +135,6 @@ function getEntryFiles(
 
   if (hasInstrumentationHook) {
     files.push(`server/edge-${INSTRUMENTATION_HOOK_FILENAME}.js`)
-  }
-
-  if (process.env.NODE_ENV === 'production') {
-    files.push(PRERENDER_MANIFEST.replace('json', 'js'))
   }
 
   files.push(
@@ -154,10 +154,10 @@ function getCreateAssets(params: {
   const { compilation, metadataByEntry, opts } = params
   return (assets: any) => {
     const middlewareManifest: MiddlewareManifest = {
-      sortedMiddleware: [],
+      version: MANIFEST_VERSION,
       middleware: {},
       functions: {},
-      version: 2,
+      sortedMiddleware: [],
     }
 
     const hasInstrumentationHook = compilation.entrypoints.has(
@@ -206,6 +206,7 @@ function getCreateAssets(params: {
         },
       ]
 
+      const isEdgeFunction = !!(metadata.edgeApiFunction || metadata.edgeSSR)
       const edgeFunctionDefinition: EdgeFunctionDefinition = {
         files: getEntryFiles(
           entrypoint.getFiles(),
@@ -224,10 +225,11 @@ function getCreateAssets(params: {
           name,
           filePath,
         })),
+        env: opts.edgeEnvironments,
         ...(metadata.regions && { regions: metadata.regions }),
       }
 
-      if (metadata.edgeApiFunction || metadata.edgeSSR) {
+      if (isEdgeFunction) {
         middlewareManifest.functions[page] = edgeFunctionDefinition
       } else {
         middlewareManifest.middleware[page] = edgeFunctionDefinition
@@ -268,7 +270,8 @@ function buildWebpackError({
 }
 
 function isInMiddlewareLayer(parser: webpack.javascript.JavascriptParser) {
-  return parser.state.module?.layer === 'middleware'
+  const layer = parser.state.module?.layer
+  return layer === WEBPACK_LAYERS.middleware || layer === WEBPACK_LAYERS.api
 }
 
 function isNodeJsModule(moduleName: string) {
@@ -292,7 +295,7 @@ function isDynamicCodeEvaluationAllowed(
 
   const name = fileName.replace(rootDir ?? '', '')
 
-  return picomatch(middlewareConfig?.unstable_allowDynamicGlobs ?? [])(name)
+  return picomatch(middlewareConfig?.unstable_allowDynamic ?? [])(name)
 }
 
 function buildUnsupportedApiError({
@@ -644,7 +647,7 @@ function getExtractMetadata(params: {
           if (/node_modules[\\/]regenerator-runtime[\\/]runtime\.js/.test(id)) {
             continue
           }
-          if (route?.middlewareConfig?.unstable_allowDynamicGlobs) {
+          if (route?.middlewareConfig?.unstable_allowDynamic) {
             telemetry?.record({
               eventName: 'NEXT_EDGE_ALLOW_DYNAMIC_USED',
               payload: {
@@ -735,21 +738,32 @@ function getExtractMetadata(params: {
   }
 }
 
+// These values will be replaced again in edge runtime deployment build.
+// `buildId` represents BUILD_ID to be externalized in env vars.
+// `encryptionKey` represents server action encryption key to be externalized in env vars.
+type EdgeRuntimeEnvironments = Record<string, string> & {
+  __NEXT_BUILD_ID: string
+  NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: string
+}
+
 interface Options {
   dev: boolean
   sriEnabled: boolean
   rewrites: CustomRoutes['rewrites']
+  edgeEnvironments: EdgeRuntimeEnvironments
 }
 
 export default class MiddlewarePlugin {
   private readonly dev: Options['dev']
   private readonly sriEnabled: Options['sriEnabled']
   private readonly rewrites: Options['rewrites']
+  private readonly edgeEnvironments: EdgeRuntimeEnvironments
 
-  constructor({ dev, sriEnabled, rewrites }: Options) {
+  constructor({ dev, sriEnabled, rewrites, edgeEnvironments }: Options) {
     this.dev = dev
     this.sriEnabled = sriEnabled
     this.rewrites = rewrites
+    this.edgeEnvironments = edgeEnvironments
   }
 
   public apply(compiler: webpack.Compiler) {
@@ -795,6 +809,7 @@ export default class MiddlewarePlugin {
           opts: {
             sriEnabled: this.sriEnabled,
             rewrites: this.rewrites,
+            edgeEnvironments: this.edgeEnvironments,
           },
         })
       )
@@ -833,7 +848,8 @@ export async function handleWebpackExternalForEdgeRuntime({
   getResolve: () => any
 }) {
   if (
-    contextInfo.issuerLayer === 'middleware' &&
+    (contextInfo.issuerLayer === WEBPACK_LAYERS.middleware ||
+      contextInfo.issuerLayer === WEBPACK_LAYERS.api) &&
     isNodeJsModule(request) &&
     !supportedEdgePolyfills.has(request)
   ) {

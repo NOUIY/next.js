@@ -194,7 +194,8 @@ These metrics work in all browsers that support the [User Timing API](https://ca
 
 ## Usage on Vercel
 
-[Vercel Speed Insights](https://vercel.com/docs/concepts/speed-insights) are automatically configured on Vercel deployments, and don't require the use of `useReportWebVitals`. This hook is useful in local development, or if you're using a different analytics service.
+[Vercel Speed Insights](https://vercel.com/docs/speed-insights/quickstart) does not `useReportWebVitals`, but `@vercel/speed-insights` package instead.
+`useReportWebVitals` hook is useful in local development, or if you're using a different service for collecting Web Vitals.
 
 ## Sending results to external systems
 
@@ -222,7 +223,7 @@ useReportWebVitals((metric) => {
 > ```js
 > useReportWebVitals(metric => {
 >   // Use `window.gtag` if you initialized Google Analytics as this example:
->   // https://github.com/vercel/next.js/blob/canary/examples/with-google-analytics/pages/_app.js
+>   // https://github.com/vercel/next.js/blob/canary/examples/with-google-analytics
 >   window.gtag('event', metric.name, {
 >     value: Math.round(metric.name === 'CLS' ? metric.value * 1000 : metric.value), // values must be integers
 >     event_label: metric.id, // id unique to current page load
