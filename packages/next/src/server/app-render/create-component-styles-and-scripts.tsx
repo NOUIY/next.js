@@ -3,6 +3,7 @@ import { interopDefault } from './interop-default'
 import { getLinkAndScriptTags } from './get-css-inlined-link-tags'
 import type { AppRenderContext } from './app-render'
 import { getAssetQueryString } from './get-asset-query-string'
+import { encodeURIPath } from '../../shared/lib/encode-uri-path'
 
 export async function createComponentStylesAndScripts({
   filePath,
@@ -26,10 +27,9 @@ export async function createComponentStylesAndScripts({
 
   const styles = cssHrefs
     ? cssHrefs.map((href, index) => {
-        const fullHref = `${ctx.assetPrefix}/_next/${href}${getAssetQueryString(
-          ctx,
-          true
-        )}`
+        const fullHref = `${ctx.assetPrefix}/_next/${encodeURIPath(
+          href
+        )}${getAssetQueryString(ctx, true)}`
 
         // `Precedence` is an opt-in signal for React to handle resource
         // loading and deduplication, etc. It's also used as the key to sort
@@ -47,15 +47,21 @@ export async function createComponentStylesAndScripts({
             // @ts-ignore
             precedence={precedence}
             crossOrigin={ctx.renderOpts.crossOrigin}
-            key={index}
+            key={`style-${index}`}
           />
         )
       })
     : null
 
   const scripts = jsHrefs
-    ? jsHrefs.map((href) => (
-        <script src={`${ctx.assetPrefix}/_next/${href}`} async={true} />
+    ? jsHrefs.map((href, index) => (
+        <script
+          src={`${ctx.assetPrefix}/_next/${encodeURIPath(
+            href
+          )}${getAssetQueryString(ctx, true)}`}
+          async={true}
+          key={`script-${index}`}
+        />
       ))
     : null
 
