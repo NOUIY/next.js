@@ -12,7 +12,7 @@
     "next": "canary",
     "postgres": "^3.4.3",
     "react": "rc",
-    "react-dom": "rc",
+    "react-dom": "19.1.0",
     "typescript": "5.3.3",
     "zod": "^3.22.4"
   }
