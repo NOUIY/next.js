@@ -12,7 +12,7 @@
     "fauna": "^1.2.0",
     "next": "canary",
     "react": "rc",
-    "react-dom": "rc",
+    "react-dom": "19.1.0",
     "server-only": "^0.0.1"
   },
   "devDependencies": {
